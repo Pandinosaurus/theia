@@ -31,18 +31,15 @@ export class ViewRegistry {
     protected applicationStateService: FrontendApplicationStateService;
 
     private containersWidgets: Map<string, ViewsContainerWidget> = new Map<string, ViewsContainerWidget>();
-    private pending: Promise<void>;
+    private promiseChain: Promise<void>;
 
     registerViewContainer(location: string, viewContainer: ViewContainer) {
         const widget = new ViewsContainerWidget(viewContainer);
         this.containersWidgets.set(viewContainer.id, widget);
-        if (!this.pending) {
-            this.pending = this.applicationStateService.reachedState('ready');
-        }
-        this.pending = this.pending.then(() => {
+        this.updatePromiseChain(() => {
             if (widget && !this.applicationShell.getTabBarFor(widget)) {
                 this.applicationShell.addWidget(widget, {
-                    area:  ApplicationShell.isSideArea(location) ? location : 'left'
+                    area: ApplicationShell.isSideArea(location) ? location : 'left'
                 });
             }
         });
@@ -57,11 +54,18 @@ export class ViewRegistry {
 
     onRegisterTreeView(viewId: string, treeViewWidget: TreeViewWidget) {
         this.containersWidgets.forEach(async (viewsContainerWidget: ViewsContainerWidget) => {
-            await this.pending;
+            await this.promiseChain;
             if (viewsContainerWidget.hasView(viewId)) {
                 viewsContainerWidget.addWidget(viewId, treeViewWidget);
                 this.applicationShell.activateWidget(viewsContainerWidget.id);
             }
         });
+    }
+
+    private updatePromiseChain(callback: () => void): void {
+        if (!this.promiseChain) {
+            this.promiseChain = this.applicationStateService.reachedState('ready');
+        }
+        this.promiseChain = this.promiseChain.then(callback);
     }
 }
